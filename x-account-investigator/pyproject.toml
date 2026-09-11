@@ -16,5 +16,6 @@ dependencies = [
     "pydantic>=2.13.5",
     "python-dotenv>=1.2.3",
     "reportlab>=5.0.1",
+    "streamlit>=1.63.0",
     "tavily-python>=0.8.1",
 ]

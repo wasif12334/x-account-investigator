@@ -13,7 +13,7 @@ class BaseAgent:
         )
 
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-3.7-flash"
+            model="gemini-2.5-flash"
         )
 
     def search(self, query: str):

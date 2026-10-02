@@ -1,114 +1,80 @@
-from Agents.Profile_Analyzer import ProfileAnalyzer
-from Agents.Activity_Analyzer import ActivityAnalyzer
-from Agents.Identity_OSINT import IdentityOSINTAgent
-from Agents.Evidence_Verifier import EvidenceVerifier
-from Agents.Report_Generator import ReportGenerator
+from graph.investigator_graph import build_investigator_graph
 
 
 def main():
 
-    username = input("Enter X Username: ").strip()
+    print()
+    print("=" * 60)
+    print("X ACCOUNT INVESTIGATOR")
+    print("=" * 60)
+
+    username = input(
+        "\nEnter X username: "
+    ).strip()
+
+    username = username.replace("@", "")
 
     if not username:
-        print("Username cannot be empty.")
+        print("Username is required.")
         return
 
-    print("\n" + "=" * 70)
-    print("X ACCOUNT INVESTIGATION SYSTEM")
-    print("=" * 70)
+    print()
+    print(f"Target: @{username}")
 
-    # ==================================================
-    # AGENT 1 - PROFILE ANALYZER
-    # ==================================================
+    print("\nRunning LangGraph investigation...")
+    print("Please wait...\n")
 
-    print("\n[1/5] Running Profile Analyzer...")
+    # -----------------------------------------------------
+    # Build graph
+    # -----------------------------------------------------
 
-    profile_agent = ProfileAnalyzer()
+    graph = build_investigator_graph()
 
-    profile_result = profile_agent.analyse_profile(username)
+    # -----------------------------------------------------
+    # Initial state
+    # -----------------------------------------------------
 
-    print("✓ Profile analysis completed.")
+    initial_state = {
+        "username": username
+    }
 
-    # ==================================================
-    # AGENT 2 - ACTIVITY ANALYZER
-    # ==================================================
+    # -----------------------------------------------------
+    # Run investigation
+    # -----------------------------------------------------
 
-    print("\n[2/5] Running Activity Analyzer...")
+    result = graph.invoke(initial_state)
 
-    activity_agent = ActivityAnalyzer()
+    # -----------------------------------------------------
+    # Complete
+    # -----------------------------------------------------
 
-    activity_result = activity_agent.analyse_activity(username)
-
-    print("✓ Activity analysis completed.")
-
-    # ==================================================
-    # AGENT 3 - IDENTITY OSINT
-    # ==================================================
-
-    print("\n[3/5] Running Identity OSINT Agent...")
-
-    identity_agent = IdentityOSINTAgent()
-
-    identity_result = identity_agent.analyse_identity(username)
-
-    print("✓ Identity investigation completed.")
-
-    # ==================================================
-    # AGENT 4 - EVIDENCE VERIFIER
-    # ==================================================
-
-    print("\n[4/5] Running Evidence Verifier...")
-
-    verifier = EvidenceVerifier()
-
-    verification_result = verifier.verify(
-        profile_result,
-        activity_result,
-        identity_result
-    )
-
-    print("✓ Evidence verification completed.")
-
-    # ==================================================
-    # AGENT 5 - REPORT GENERATOR
-    # ==================================================
-
-    print("\n[5/5] Generating Investigation Report...")
-
-    report_generator = ReportGenerator()
-
-    report_path = report_generator.generate_report(
-        username=username,
-        profile_result=profile_result,
-        activity_result=activity_result,
-        identity_result=identity_result,
-        verification_result=verification_result
-    )
-
-    print("✓ Investigation report generated.")
-
-    # ==================================================
-    # FINAL TERMINAL SUMMARY
-    # ==================================================
-
-    print("\n" + "=" * 70)
+    print()
+    print("=" * 60)
     print("INVESTIGATION COMPLETE")
-    print("=" * 70)
+    print("=" * 60)
 
-    print(f"\nUsername: @{username}")
+    print("\nFINAL REPORT\n")
 
     print(
-        f"Confidence Score: "
-        f"{verification_result.confidence_score}"
+        result.get(
+            "final_report",
+            "No report generated."
+        )
     )
 
-    print("\nFinal Assessment:")
-    print(verification_result.final_assessment)
+    print()
+    print("=" * 60)
 
-    print("\nReport:")
-    print(report_path)
+    print("PDF REPORT:")
 
-    print("\n" + "=" * 70)
+    print(
+        result.get(
+            "report_file",
+            "No PDF generated."
+        )
+    )
+
+    print("=" * 60)
 
 
 if __name__ == "__main__":

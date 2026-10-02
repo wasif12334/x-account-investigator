@@ -1,51 +1,87 @@
-# 🚀 How the Project Works
+# 🚀 X Account Investigator
 
-The X Account Investigator is an AI-powered multi-agent system that investigates publicly available information about an X (Twitter) account.
+X Account Investigator is an AI-powered multi-agent OSINT system that analyzes publicly available information from X (Twitter) and Wikipedia to generate structured investigation reports.
 
-The investigation process follows these steps:
-
-1. The user provides an X username.
-2. The Profile Analyzer collects account information.
-3. The Activity Analyzer examines recent activity and topics.
-4. The Identity OSINT Agent searches public sources to identify the person or organization behind the account.
-5. The Evidence Verifier reviews all findings and checks for inconsistencies.
-6. The Report Agent generates the final investigation report.
+The project uses LangGraph, twscrape, Wikipedia, and AI agents to investigate account activity, profile information, interaction patterns, topics, and publicly available identity signals.
 
 ---
 
-# 📂 Project Structure
+# ⚡ Quick Start
 
-```text
-x-account-investigator/
-│
-├── main.py                    # Main entry point
-├── .env                       # API Keys
-│
-├── Agents/
-│   ├── BaseAgent.py
-│   ├── ProfileAnalyzer.py
-│   ├── ActivityAnalyzer.py
-│   ├── IdentityOSINTAgent.py
-│   ├── EvidenceVerifier.py
-│   └── ReportAgent.py
-│
-├── Models/
-│   └── schemas.py
-│
-└── requirements.txt
-```
-
----
-
-# ▶️ Running the Project
-
-Install dependencies:
+## 1. Clone Repository
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/wasif12334/x-account-investigator.git
+cd x-account-investigator
 ```
 
-Run the project:
+## 2. Create Virtual Environment
+
+```bash
+uv venv
+```
+
+Activate:
+
+### Windows
+
+```bash
+.venv\Scripts\activate
+```
+
+### Linux / Mac
+
+```bash
+source .venv/bin/activate
+```
+
+---
+
+## 3. Install Dependencies
+
+```bash
+uv pip install -r requirements.txt
+```
+
+---
+
+## 4. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+groq_ai_key=your_groq_ai_key
+```
+
+---
+
+## 5. Configure twscrape (One-Time Setup)
+
+This project uses the open-source **twscrape** library to collect publicly available X data.
+
+Add an X account:
+
+```bash
+twscrape add_accounts accounts.txt
+```
+
+Login:
+
+```bash
+twscrape login_accounts
+```
+
+Verify:
+
+```bash
+twscrape accounts
+```
+
+This setup is only required once. twscrape stores and reuses login sessions automatically.
+
+---
+
+## 6. Run the Project
 
 ```bash
 python main.py
@@ -57,61 +93,119 @@ or
 uv run python main.py
 ```
 
----
-
-# 🔑 Environment Variables
-
-Create a `.env` file in the project root directory:
-
-```env
-GOOGLE_API_KEY=your_google_api_key
-TAVILY_API_KEY=your_tavily_api_key
-```
-
----
-
-# 🎯 Changing the X Account
-
-Open:
+Enter an X username when prompted:
 
 ```text
-main.py
+Enter X username:
 ```
 
-Locate the username variable:
+Example:
 
-```python
-username = "Cristiano"
+```text
+elonmusk
 ```
 
-Replace it with any X username:
-
-```python
-username = "elonmusk"
-```
-
-or
-
-```python
-username = "OpenAI"
-```
-
-Save the file and run the project again.
+The investigation will start automatically and generate a PDF report.
 
 ---
 
-# 🤖 AI Model Configuration
+# 🔍 Investigation Pipeline
 
-Open:
+The investigation follows a LangGraph workflow:
 
 ```text
-Agents/BaseAgent.py
+User Input
+    │
+    ▼
+Wikipedia Agent
+    │
+    ▼
+X Scraper (twscrape)
+    │
+    ▼
+Profile Agent
+    │
+    ▼
+Network Agent
+    │
+    ▼
+Temporal Agent
+    │
+    ▼
+Topic Agent
+    │
+    ▼
+Verification Agent
+    │
+    ▼
+Report Agent
+    │
+    ▼
+PDF Investigation Report
 ```
 
-Locate:
+### Wikipedia Agent
 
-```python
-model="gemini-2.5-flash"
+Searches Wikipedia for matching entities and gathers publicly available background information.
+
+### X Scraper
+
+Collects:
+
+* Profile metadata
+* Followers count
+* Following count
+* Account creation date
+* Recent tweets
+
+### Profile Agent
+
+Analyzes account profile information and metadata.
+
+### Network Agent
+
+Analyzes mentions and interaction patterns.
+
+### Temporal Agent
+
+Analyzes posting behavior and activity timing.
+
+### Topic Agent
+
+Identifies:
+
+* Keywords
+* Hashtags
+* Languages
+* Content signals
+
+### Verification Agent
+
+Reviews evidence, identifies limitations, and evaluates cross-source consistency.
+
+### Report Agent
+
+Generates a structured investigation report and exports a professional PDF with charts and summaries.
+
+---
+
+# 🏗 Architecture
+
+```text
+User Input
+     │
+     ▼
+LangGraph Workflow
+     │
+     ├── Wikipedia Agent
+     ├── X Scraper
+     ├── Profile Agent
+     ├── Network Agent
+     ├── Temporal Agent
+     ├── Topic Agent
+     ├── Verification Agent
+     └── Report Agent
+                │
+                ▼
+         PDF Report
 ```
-
-Change it to any supported Gemini model if needed.

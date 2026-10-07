@@ -1,5 +1,9 @@
-from graph.investigator_graph import build_investigator_graph
+from graph.investigator_graph import build_graph
 
+
+# =========================================================
+# MAIN
+# =========================================================
 
 def main():
 
@@ -8,52 +12,261 @@ def main():
     print("X ACCOUNT INVESTIGATOR")
     print("=" * 60)
 
-    username = input(
-        "\nEnter X username: "
+    # -----------------------------------------------------
+    # INPUT
+    # -----------------------------------------------------
+
+    person_name = input(
+        "\nEnter person's name: "
     ).strip()
 
-    username = username.replace("@", "")
+    if not person_name:
 
-    if not username:
-        print("Username is required.")
+        print(
+            "Person name is required."
+        )
+
         return
 
+    # -----------------------------------------------------
+    # TARGET
+    # -----------------------------------------------------
+
     print()
-    print(f"Target: @{username}")
 
-    print("\nRunning LangGraph investigation...")
-    print("Please wait...\n")
+    print(
+        f"Target person: {person_name}"
+    )
+
+    print()
+
+    print(
+        "Investigation pipeline:"
+    )
+
+    print(
+        "  Person Name"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  Wikipedia"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  X Account Discovery"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  X Scraper"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  Profile / Network / Temporal / Topic"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  Verification"
+    )
+
+    print(
+        "      ↓"
+    )
+
+    print(
+        "  Final Report + PDF"
+    )
+
+    print()
+
+    print(
+        "Running LangGraph investigation..."
+    )
+
+    print(
+        "Please wait...\n"
+    )
 
     # -----------------------------------------------------
-    # Build graph
+    # BUILD GRAPH
     # -----------------------------------------------------
 
-    graph = build_investigator_graph()
+    graph = build_graph()
 
     # -----------------------------------------------------
-    # Initial state
+    # INITIAL STATE
     # -----------------------------------------------------
 
     initial_state = {
-        "username": username
+
+        "person_name":
+            person_name,
+
+        "username":
+            "",
+
+        "x_candidates":
+            [],
+
+        "discovered_handle":
+            "",
+
+        "discovery_confidence":
+            0,
+
+        "discovery_evidence":
+            [],
+
+        "wikipedia_data":
+            {},
+
+        "wikipedia_analysis":
+            {},
+
+        "x_data":
+            {},
+
+        "profile_analysis":
+            {},
+
+        "network_analysis":
+            {},
+
+        "temporal_analysis":
+            {},
+
+        "topic_analysis":
+            {},
+
+        "verification_analysis":
+            {},
+
+        "final_report":
+            "",
+
+        "report_file":
+            ""
     }
 
     # -----------------------------------------------------
-    # Run investigation
+    # RUN
     # -----------------------------------------------------
 
-    result = graph.invoke(initial_state)
+    try:
+
+        result = graph.invoke(
+            initial_state
+        )
+
+    except Exception as e:
+
+        print()
+        print("=" * 60)
+        print("INVESTIGATION FAILED")
+        print("=" * 60)
+
+        print()
+
+        print(
+            f"Error: {e}"
+        )
+
+        return
 
     # -----------------------------------------------------
-    # Complete
+    # COMPLETE
     # -----------------------------------------------------
 
     print()
+
     print("=" * 60)
     print("INVESTIGATION COMPLETE")
     print("=" * 60)
 
-    print("\nFINAL REPORT\n")
+    # -----------------------------------------------------
+    # PERSON
+    # -----------------------------------------------------
+
+    print()
+
+    print(
+        f"Person: {person_name}"
+    )
+
+    # -----------------------------------------------------
+    # DISCOVERED X ACCOUNT
+    # -----------------------------------------------------
+
+    handle = result.get(
+        "discovered_handle",
+        ""
+    )
+
+    confidence = result.get(
+        "discovery_confidence",
+        0
+    )
+
+    print()
+
+    if handle:
+
+        print(
+            f"X Account: @{handle}"
+        )
+
+        print(
+            f"Discovery Confidence: {confidence}"
+        )
+
+    else:
+
+        print(
+            "X Account: Not confidently discovered."
+        )
+
+        print(
+            f"Discovery Confidence: {confidence}"
+        )
+
+    # -----------------------------------------------------
+    # FINAL REPORT
+    # -----------------------------------------------------
+
+    print()
+
+    print(
+        "-" * 60
+    )
+
+    print(
+        "FINAL REPORT"
+    )
+
+    print(
+        "-" * 60
+    )
+
+    print()
 
     print(
         result.get(
@@ -62,10 +275,23 @@ def main():
         )
     )
 
-    print()
-    print("=" * 60)
+    # -----------------------------------------------------
+    # PDF
+    # -----------------------------------------------------
 
-    print("PDF REPORT:")
+    print()
+
+    print(
+        "=" * 60
+    )
+
+    print(
+        "PDF REPORT"
+    )
+
+    print(
+        "=" * 60
+    )
 
     print(
         result.get(
@@ -74,8 +300,14 @@ def main():
         )
     )
 
-    print("=" * 60)
+    print(
+        "=" * 60
+    )
 
+
+# =========================================================
+# ENTRY POINT
+# =========================================================
 
 if __name__ == "__main__":
     main()

@@ -1,98 +1,85 @@
+import re
 from collections import Counter
+from typing import Any, Dict, List
 
+
+def get_tweets(state) -> List[Dict[str, Any]]:
+    """
+    Get tweets from the normalized top-level state first.
+    Fall back to x_data for compatibility.
+    """
+
+    tweets = state.get("tweets")
+
+    if isinstance(tweets, list):
+        return tweets
+
+    x_data = state.get("x_data", {})
+
+    if isinstance(x_data, dict):
+        tweets = x_data.get("tweets", [])
+
+        if isinstance(tweets, list):
+            return tweets
+
+    return []
 
 def network_agent(state):
 
-    x_data = state.get(
-        "x_data",
-        {}
-    )
-
-    tweets = x_data.get(
+    tweets = state.get("x_data", {}).get(
         "tweets",
         []
     )
 
-    tweets_status = x_data.get(
-        "tweets_status",
-        "unknown"
-    )
-
-    # No tweet data
     if not tweets:
 
-        if tweets_status == "rate_limited":
-
-            return {
-                "network_analysis": {
-                    "status": "rate_limited",
-                    "summary": (
-                        "Network analysis could not be performed "
-                        "because tweet collection was temporarily "
-                        "unavailable."
-                    ),
-                    "mentioned_accounts": [],
-                    "interaction_count": 0
-                }
-            }
-
-        return {
-            "network_analysis": {
-                "status": "not_analyzed",
-                "summary": (
-                    "Network analysis was not performed because "
-                    "no tweet dataset was available."
-                ),
-                "mentioned_accounts": [],
-                "interaction_count": 0
-            }
+        state["network_analysis"] = {
+            "status": "not_available",
+            "tweets_analyzed": 0,
+            "mentioned_accounts": [],
+            "interaction_count": 0,
+            "reason": (
+                "No tweets available."
+            )
         }
 
-    mentions = []
+        return state
+
+    mentions = {}
 
     for tweet in tweets:
 
-        tweet_mentions = tweet.get(
-            "user_mentions",
-            []
+        text = getattr(
+            tweet,
+            "rawContent",
+            ""
         )
 
-        mentions.extend(
-            tweet_mentions
-        )
+        for word in text.split():
 
-    mention_counts = Counter(
-        mentions
-    )
+            if word.startswith("@"):
 
-    top_accounts = [
-        {
-            "username": username,
-            "count": count
-        }
+                username = word.lower()
 
-        for username, count
-        in mention_counts.most_common(10)
-    ]
+                mentions[username] = (
+                    mentions.get(username, 0)
+                    + 1
+                )
 
-    return {
-        "network_analysis": {
-            "status": "success",
+    top_mentions = sorted(
+        mentions.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:20]
 
-            "total_tweets_analyzed": len(
-                tweets
-            ),
-
-            "mentioned_accounts": top_accounts,
-
-            "interaction_count": len(
-                mentions
-            ),
-
-            "summary": (
-                f"{len(tweets)} tweets were analyzed. "
-                f"{len(mentions)} public account mentions "
-                f"were identified."
-            )
-        }
+    state["network_analysis"] = {
+        "status": "analyzed",
+        "tweets_analyzed": len(tweets),
+        "unique_accounts": len(mentions),
+        "interaction_count": sum(
+            mentions.values()
+        ),
+        "top_mentions": top_mentions
     }
+
+    return state

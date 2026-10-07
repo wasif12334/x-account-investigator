@@ -1,338 +1,877 @@
 import asyncio
-import os
 import re
-import os
-import subprocess
-import sys
-from pathlib import Path
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Tell twscrape to fail instead of waiting forever
-os.environ["TWS_RAISE_WHEN_NO_ACCOUNT"] = "true"
+from typing import Any, Dict, List, Tuple
 
 from twscrape import API, AccountsPool
 
 
-# =========================================================
+# =============================================================
 # CONFIGURATION
-# =========================================================
+# =============================================================
 
-MAX_TWEETS = int(os.getenv("MAX_TWEETS", "500"))
+MAX_TWEETS = 500
+
+# Maximum time allowed for tweet collection.
+#
+# If twscrape has no available account and starts waiting,
+# this timeout stops the wait and allows the investigation
+# pipeline to continue.
+TWEET_COLLECTION_TIMEOUT = 15
 
 
-# =========================================================
-# SCRAPER
-# =========================================================
-def reset_twscrape_locks():
-    """
-    Automatically clear stale twscrape queue locks
-    before starting a new investigation.
-    """
+# =============================================================
+# SAFE FIELD ACCESS
+# =============================================================
+
+def get_user_field(user, *names, default=None):
+
+    for name in names:
+
+        try:
+            value = getattr(user, name)
+
+            if value is not None:
+                return value
+
+        except Exception:
+            pass
+
+    return default
+
+
+def get_tweet_field(tweet, *names, default=None):
+
+    for name in names:
+
+        try:
+            value = getattr(tweet, name)
+
+            if value is not None:
+                return value
+
+        except Exception:
+            pass
+
+    return default
+
+
+# =============================================================
+# SAFE STRING
+# =============================================================
+
+def safe_string(value):
+
+    if value is None:
+        return ""
 
     try:
-        python_dir = Path(sys.executable).parent
+        return str(value).strip()
 
-        # Windows virtual environment
-        twscrape_exe = python_dir / "twscrape.exe"
+    except Exception:
+        return ""
 
-        if twscrape_exe.exists():
-            command = [str(twscrape_exe), "reset_locks"]
-        else:
-            # Fallback if twscrape is available through PATH
-            command = ["twscrape", "reset_locks"]
 
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=30
+# =============================================================
+# PROFILE EXTRACTION
+# =============================================================
+
+def extract_profile(user):
+
+    username = safe_string(
+        get_user_field(
+            user,
+            "username",
+            default=""
         )
+    )
 
-        if result.returncode == 0:
-            print("      twscrape queue locks reset successfully.")
-        else:
-            print("      Warning: could not reset twscrape locks.")
-            if result.stderr:
-                print("      ", result.stderr.strip())
+    display_name = safe_string(
+        get_user_field(
+            user,
+            "displayname",
+            "display_name",
+            default=""
+        )
+    )
 
-    except Exception as e:
-        print(f"      Warning: automatic lock reset failed: {e}")
+    bio = safe_string(
+        get_user_field(
+            user,
+            "rawDescription",
+            "description",
+            default=""
+        )
+    )
 
-async def scrape_account(username):
-    print("      Resetting twscrape queue locks...")
-    reset_twscrape_locks()
+    location = safe_string(
+        get_user_field(
+            user,
+            "location",
+            default=""
+        )
+    )
 
-    username = username.replace("@", "").strip()
+    followers = get_user_field(
+        user,
+        "followersCount",
+        "followers_count",
+        default=0
+    )
 
-    api = API(AccountsPool())
+    following = get_user_field(
+        user,
+        "friendsCount",
+        "following_count",
+        default=0
+    )
 
-    # -----------------------------------------------------
-    # Get user profile
-    # -----------------------------------------------------
+    tweets_count = get_user_field(
+        user,
+        "statusesCount",
+        "statuses_count",
+        default=0
+    )
 
-    try:
-        user = await api.user_by_login(username)
+    verified = get_user_field(
+        user,
+        "verified",
+        default=False
+    )
 
-    except Exception as e:
+    created = get_user_field(
+        user,
+        "created",
+        default=None
+    )
 
-        return {
-            "collection_status": "error",
-            "profile_status": "error",
-            "tweets_status": "not_collected",
+    profile_url = (
+        f"https://x.com/{username}"
+        if username
+        else ""
+    )
 
-            "error": str(e),
-
-            "profile": {},
-            "tweets": [],
-
-            "tweets_requested": MAX_TWEETS,
-            "tweets_collected": 0,
-        }
-
-    # -----------------------------------------------------
-    # User not found
-    # -----------------------------------------------------
-
-    if not user:
-
-        return {
-            "collection_status": "not_found",
-            "profile_status": "not_found",
-            "tweets_status": "not_collected",
-
-            "error": None,
-
-            "profile": {},
-            "tweets": [],
-
-            "tweets_requested": MAX_TWEETS,
-            "tweets_collected": 0,
-        }
-
-    # -----------------------------------------------------
-    # Profile information
-    # -----------------------------------------------------
-
-    profile = {
-
-        "username":
-            getattr(user, "username", username),
-
-        "display_name":
-            getattr(user, "displayname", None),
-
-        "bio":
-            getattr(user, "rawDescription", None),
-
-        "location":
-            getattr(user, "location", None),
-
-        "followers":
-            getattr(user, "followersCount", None),
-
-        "following":
-            getattr(user, "followingCount", None),
-
-        "tweets_count":
-            getattr(user, "statusesCount", None),
-
-        "verified":
-            getattr(user, "verified", None),
-
-        "created":
-            str(getattr(user, "created", None)),
-
-        "profile_url":
-            f"https://x.com/{getattr(user, 'username', username)}",
+    return {
+        "username": username,
+        "display_name": display_name,
+        "bio": bio,
+        "location": location,
+        "followers": followers or 0,
+        "following": following or 0,
+        "tweets_count": tweets_count or 0,
+        "verified": bool(verified),
+        "created": (
+            str(created)
+            if created
+            else ""
+        ),
+        "profile_url": profile_url,
     }
 
-    # -----------------------------------------------------
-    # Tweets
-    # -----------------------------------------------------
+
+# =============================================================
+# TWEET NORMALIZATION
+# =============================================================
+
+def normalize_tweet(tweet):
+    """
+    Convert a raw twscrape Tweet object into a simple
+    dictionary that all downstream agents can understand.
+
+    Output:
+
+    {
+        "id": "...",
+        "text": "...",
+        "date": "...",
+        "username": "...",
+        "hashtags": [...],
+        "mentions": [...]
+    }
+    """
+
+    # ---------------------------------------------------------
+    # TEXT
+    # ---------------------------------------------------------
+
+    text = safe_string(
+        get_tweet_field(
+            tweet,
+            "rawContent",
+            "text",
+            default=""
+        )
+    )
+
+    # ---------------------------------------------------------
+    # ID
+    # ---------------------------------------------------------
+
+    tweet_id = safe_string(
+        get_tweet_field(
+            tweet,
+            "id",
+            default=""
+        )
+    )
+
+    # ---------------------------------------------------------
+    # DATE
+    # ---------------------------------------------------------
+
+    date = get_tweet_field(
+        tweet,
+        "date",
+        default=None
+    )
+
+    # ---------------------------------------------------------
+    # USERNAME
+    # ---------------------------------------------------------
+
+    user_value = get_tweet_field(
+        tweet,
+        "user",
+        default=""
+    )
+
+    username = ""
+
+    if hasattr(
+        user_value,
+        "username"
+    ):
+
+        username = safe_string(
+            getattr(
+                user_value,
+                "username",
+                ""
+            )
+        )
+
+    else:
+
+        username = safe_string(
+            user_value
+        )
+
+    # ---------------------------------------------------------
+    # HASHTAGS
+    # ---------------------------------------------------------
+
+    hashtags = re.findall(
+        r"#([A-Za-z0-9_]+)",
+        text
+    )
+
+    # ---------------------------------------------------------
+    # MENTIONS
+    # ---------------------------------------------------------
+
+    mentions = re.findall(
+        r"@([A-Za-z0-9_]+)",
+        text
+    )
+
+    # ---------------------------------------------------------
+    # RETURN NORMALIZED TWEET
+    # ---------------------------------------------------------
+
+    return {
+        "id": tweet_id,
+
+        "text": text,
+
+        "date": (
+            str(date)
+            if date
+            else ""
+        ),
+
+        "username": username,
+
+        "hashtags": hashtags,
+
+        "mentions": mentions,
+    }
+
+
+# =============================================================
+# PRINT PROFILE
+# =============================================================
+
+def print_profile_summary(profile):
+
+    print(
+        "\n      ---------- X PROFILE DATA ----------"
+    )
+
+    print(
+        f"      Username:   "
+        f"{profile.get('username', '')}"
+    )
+
+    print(
+        f"      Name:       "
+        f"{profile.get('display_name', '')}"
+    )
+
+    print(
+        f"      Bio:        "
+        f"{profile.get('bio', '')}"
+    )
+
+    print(
+        f"      Location:   "
+        f"{profile.get('location', '')}"
+    )
+
+    print(
+        f"      Followers:  "
+        f"{profile.get('followers', 0)}"
+    )
+
+    print(
+        f"      Following:  "
+        f"{profile.get('following', 0)}"
+    )
+
+    print(
+        f"      Tweets:     "
+        f"{profile.get('tweets_count', 0)}"
+    )
+
+    print(
+        f"      Verified:   "
+        f"{profile.get('verified', False)}"
+    )
+
+    print(
+        f"      Created:    "
+        f"{profile.get('created', '')}"
+    )
+
+    print(
+        f"      URL:        "
+        f"{profile.get('profile_url', '')}"
+    )
+
+    print(
+        "      -------------------------------------"
+    )
+
+
+# =============================================================
+# RAW TWEET COLLECTION
+# =============================================================
+
+async def _collect_tweets_raw(
+    api,
+    user_id,
+    limit=MAX_TWEETS
+) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Collect tweets from twscrape.
+
+    Every tweet is normalized immediately.
+
+    This means Network, Temporal and Topic agents receive
+    dictionaries instead of raw twscrape objects.
+    """
 
     tweets = []
-
-    seen_ids = set()
 
     try:
 
         async for tweet in api.user_tweets(
-            user.id,
-            limit=MAX_TWEETS
+            user_id,
+            limit=limit
         ):
 
-            tweet_id = getattr(tweet, "id", None)
+            try:
 
-            # Avoid duplicates
-            if tweet_id in seen_ids:
-                continue
-
-            seen_ids.add(tweet_id)
-
-            text = getattr(
-                tweet,
-                "rawContent",
-                ""
-            ) or ""
-
-            # -------------------------------------------------
-            # Mentions
-            # -------------------------------------------------
-
-            mentions = re.findall(
-                r"@([A-Za-z0-9_]+)",
-                text
-            )
-
-            # -------------------------------------------------
-            # Hashtags
-            # -------------------------------------------------
-
-            hashtags = getattr(
-                tweet,
-                "hashtags",
-                None
-            )
-
-            if not hashtags:
-
-                hashtags = re.findall(
-                    r"#([A-Za-z0-9_]+)",
-                    text
+                normalized = normalize_tweet(
+                    tweet
                 )
 
-            # -------------------------------------------------
-            # Store tweet
-            # -------------------------------------------------
+                tweets.append(
+                    normalized
+                )
 
-            tweets.append({
+            except Exception as normalize_error:
 
-                "id": tweet_id,
+                print(
+                    f"      Tweet normalization warning: "
+                    f"{normalize_error}"
+                )
 
-                "text": text,
+                # Do not discard all previously collected
+                # tweets because one tweet failed.
+                continue
 
-                "date":
-                    str(getattr(
-                        tweet,
-                        "date",
-                        None
-                    )),
+    except asyncio.CancelledError:
 
-                "like_count":
-                    getattr(
-                        tweet,
-                        "likeCount",
-                        0
-                    ),
+        return (
+            tweets,
+            "Tweet collection timed out."
+        )
 
-                "retweet_count":
-                    getattr(
-                        tweet,
-                        "retweetCount",
-                        0
-                    ),
+    except Exception as exc:
 
-                "reply_count":
-                    getattr(
-                        tweet,
-                        "replyCount",
-                        0
-                    ),
+        return (
+            tweets,
+            safe_string(exc)
+        )
 
-                "quote_count":
-                    getattr(
-                        tweet,
-                        "quoteCount",
-                        0
-                    ),
+    return (
+        tweets,
+        ""
+    )
 
-                "hashtags":
-                    hashtags,
 
-                "lang":
-                    getattr(
-                        tweet,
-                        "lang",
-                        None
-                    ),
+# =============================================================
+# COLLECT TWEETS WITH TIMEOUT
+# =============================================================
 
-                "user_mentions":
-                    mentions,
+async def collect_tweets(
+    api,
+    user_id,
+    limit=MAX_TWEETS
+) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Collect tweets with a hard timeout.
 
-                "url":
-                    (
-                        f"https://x.com/"
-                        f"{profile['username']}"
-                        f"/status/{tweet_id}"
-                        if tweet_id
-                        else None
-                    ),
-            })
+    This prevents twscrape from blocking the entire
+    investigation when no account is available.
+    """
 
-            # -------------------------------------------------
-            # Stop after requested number
-            # -------------------------------------------------
+    print(
+        f"      Attempting to collect up to "
+        f"{limit} tweets..."
+    )
 
-            if len(tweets) >= MAX_TWEETS:
-                break
+    print(
+        f"      Tweet collection timeout: "
+        f"{TWEET_COLLECTION_TIMEOUT} seconds"
+    )
 
-        # Make absolutely sure we don't exceed the limit
-        tweets = tweets[:MAX_TWEETS]
+    try:
 
-        return {
+        tweets, error = await asyncio.wait_for(
+            _collect_tweets_raw(
+                api,
+                user_id,
+                limit
+            ),
+            timeout=TWEET_COLLECTION_TIMEOUT
+        )
 
-            "collection_status": "success",
+        return (
+            tweets,
+            error
+        )
 
-            "profile_status": "success",
+    except asyncio.TimeoutError:
 
-            "tweets_status":
-                "success" if tweets else "empty",
+        print(
+            "\n      ⚠️ Tweet collection timed out."
+        )
 
-            "error": None,
+        print(
+            "      twscrape may be waiting for "
+            "an available X account."
+        )
 
-            "profile": profile,
+        print(
+            "      Skipping tweet collection and "
+            "continuing the investigation."
+        )
 
-            "tweets": tweets,
+        return (
+            [],
+            "Tweet collection timed out because "
+            "no twscrape account was available."
+        )
 
-            "tweets_requested": MAX_TWEETS,
+    except asyncio.CancelledError:
 
-            "tweets_collected": len(tweets),
-        }
+        print(
+            "\n      ⚠️ Tweet collection cancelled."
+        )
 
-    except Exception as e:
+        return (
+            [],
+            "Tweet collection was cancelled."
+        )
+
+    except Exception as exc:
+
+        print(
+            f"\n      ⚠️ Tweet collection error: "
+            f"{exc}"
+        )
+
+        return (
+            [],
+            safe_string(exc)
+        )
+
+
+# =============================================================
+# MAIN SCRAPER
+# =============================================================
+
+async def scrape_x_account_async(
+    handle: str
+) -> Dict[str, Any]:
+
+    handle = (
+        safe_string(handle)
+        .replace("@", "")
+        .strip()
+    )
+
+    print(
+        f"      Looking up X account: "
+        f"@{handle}"
+    )
+
+    # ---------------------------------------------------------
+    # CREATE API
+    # ---------------------------------------------------------
+
+    api = API(
+        AccountsPool()
+    )
+
+    result = {
+        "status": "error",
+
+        "profile_status": "error",
+
+        "tweet_status": "error",
+
+        "profile": {},
+
+        "tweets": [],
+
+        "requested_tweets": MAX_TWEETS,
+
+        "tweets_collected": 0,
+
+        "message": "",
+
+        "tweet_error": "",
+    }
+
+    # =========================================================
+    # PROFILE COLLECTION
+    # =========================================================
+
+    try:
+
+        user = await api.user_by_login(
+            handle
+        )
+
+        if user is None:
+
+            result["status"] = "not_found"
+
+            result["message"] = (
+                "X account was not found."
+            )
+
+            return result
+
+        profile = extract_profile(
+            user
+        )
+
+        result["profile"] = profile
+
+        result["profile_status"] = "success"
+
+        print(
+            f"      X profile found: "
+            f"@{profile['username']} "
+            f"({profile['display_name']})"
+        )
+
+        print_profile_summary(
+            profile
+        )
+
+    except Exception as exc:
+
+        result["message"] = (
+            f"Profile lookup failed: {exc}"
+        )
+
+        print(
+            f"      ❌ Profile lookup failed: "
+            f"{exc}"
+        )
+
+        return result
+
+    # =========================================================
+    # TWEET COLLECTION
+    # =========================================================
+
+    tweets, tweet_error = await collect_tweets(
+        api,
+        user.id,
+        MAX_TWEETS
+    )
+
+    result["tweets"] = tweets
+
+    result["tweets_collected"] = len(
+        tweets
+    )
+
+    result["tweet_error"] = tweet_error
+
+    # =========================================================
+    # TWEET STATUS
+    # =========================================================
+
+    if tweet_error:
 
         # -----------------------------------------------------
-        # Partial collection
+        # PARTIAL COLLECTION
         # -----------------------------------------------------
 
-        return {
+        if tweets:
 
-            "collection_status": "partial",
+            result["tweet_status"] = (
+                "partial"
+            )
 
-            "profile_status": "success",
+            result["status"] = (
+                "partial"
+            )
 
-            "tweets_status": "rate_limited",
+            result["message"] = (
+                "Profile collected and "
+                f"{len(tweets)} tweets retrieved "
+                "before collection stopped."
+            )
 
-            "error": str(e),
+            print(
+                f"\n      ⚠️ Tweet collection stopped: "
+                f"{tweet_error}"
+            )
 
-            "profile": profile,
+            print(
+                f"      Preserving "
+                f"{len(tweets)} tweets."
+            )
 
-            "tweets": tweets,
+        # -----------------------------------------------------
+        # NO TWEETS
+        # -----------------------------------------------------
 
-            "tweets_requested": MAX_TWEETS,
+        else:
 
-            "tweets_collected": len(tweets),
-        }
+            result["tweet_status"] = (
+                "unavailable"
+            )
+
+            result["status"] = (
+                "partial"
+            )
+
+            result["message"] = (
+                "Profile collected successfully, "
+                "but tweets were unavailable."
+            )
+
+            print(
+                "\n      ⚠️ Tweets unavailable."
+            )
+
+            print(
+                f"      Reason: {tweet_error}"
+            )
+
+            print(
+                "      Continuing investigation "
+                "with profile data."
+            )
+
+    # =========================================================
+    # SUCCESS
+    # =========================================================
+
+    else:
+
+        result["tweet_status"] = (
+            "success"
+        )
+
+        result["status"] = (
+            "success"
+        )
+
+        result["message"] = (
+            "Profile and tweets collected "
+            "successfully."
+        )
+
+    # =========================================================
+    # SUMMARY
+    # =========================================================
+
+    print(
+        "\n      ---------- X COLLECTION ----------"
+    )
+
+    print(
+        f"      Collection status: "
+        f"{result['status']}"
+    )
+
+    print(
+        f"      Profile status: "
+        f"{result['profile_status']}"
+    )
+
+    print(
+        f"      Tweet status: "
+        f"{result['tweet_status']}"
+    )
+
+    print(
+        f"      Tweets requested: "
+        f"{MAX_TWEETS}"
+    )
+
+    print(
+        f"      Tweets collected: "
+        f"{len(tweets)}"
+    )
+
+    if tweet_error:
+
+        print(
+            f"      Tweet error: "
+            f"{tweet_error}"
+        )
+
+    print(
+        "      ----------------------------------"
+    )
+
+    return result
 
 
-# =========================================================
-# SYNC WRAPPER
-# =========================================================
+# =============================================================
+# PUBLIC FUNCTION
+# =============================================================
 
-def scrape_x_account(username: str):
+def scrape_x_account(
+    handle: str
+):
 
     return asyncio.run(
-        scrape_account(username)
+        scrape_x_account_async(
+            handle
+        )
     )
+
+
+# =============================================================
+# LANGGRAPH NODE
+# =============================================================
+
+def x_scraper_node(state):
+
+    handle = state.get(
+        "discovered_handle",
+        ""
+    )
+
+    print(
+        f"      Collecting data for: "
+        f"@{handle}"
+    )
+
+    # ---------------------------------------------------------
+    # NO HANDLE
+    # ---------------------------------------------------------
+
+    if not handle:
+
+        return {
+            "x_data": {
+                "status": "not_found",
+
+                "profile_status": "not_found",
+
+                "tweet_status": "unavailable",
+
+                "profile": {},
+
+                "tweets": [],
+
+                "tweets_collected": 0,
+
+                "message": (
+                    "No X handle was discovered."
+                ),
+            }
+        }
+
+    # ---------------------------------------------------------
+    # RUN SCRAPER
+    # ---------------------------------------------------------
+
+    try:
+
+        result = scrape_x_account(
+            handle
+        )
+
+        return {
+            "x_data": result
+        }
+
+    except Exception as exc:
+
+        # Final safety net.
+        #
+        # The X scraper should never be able to crash
+        # the entire LangGraph investigation.
+
+        print(
+            f"\n      ⚠️ X scraper error: "
+            f"{exc}"
+        )
+
+        return {
+            "x_data": {
+
+                "status": "partial",
+
+                "profile_status": "unknown",
+
+                "tweet_status": "unavailable",
+
+                "profile": {},
+
+                "tweets": [],
+
+                "tweets_collected": 0,
+
+                "message": (
+                    f"X scraper failed: {exc}"
+                ),
+
+                "tweet_error": safe_string(
+                    exc
+                ),
+            }
+
+        }

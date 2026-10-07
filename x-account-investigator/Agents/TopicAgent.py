@@ -1,187 +1,238 @@
-from collections import Counter
 import re
+from collections import Counter
+from typing import Any, Dict, List
 
 
-def topic_agent(state):
+STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "that",
+    "this",
+    "with",
+    "from",
+    "you",
+    "your",
+    "are",
+    "was",
+    "were",
+    "have",
+    "has",
+    "had",
+    "will",
+    "would",
+    "could",
+    "should",
+    "about",
+    "into",
+    "than",
+    "then",
+    "they",
+    "them",
+    "their",
+    "there",
+    "here",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "how",
+    "more",
+    "some",
+    "very",
+    "just",
+    "also",
+    "been",
+    "being",
+    "its",
+    "it's",
+    "our",
+    "out",
+    "not",
+    "but",
+    "can",
+    "all",
+    "get",
+    "got",
+    "like",
+    "one",
+    "two",
+    "new",
+    "now",
+    "today",
+    "via",
+    "http",
+    "https",
+    "www",
+    "com",
+    "account",
+    "accounts",
+    "thank",
+}
+
+
+def get_tweets(state) -> List[Dict[str, Any]]:
+
+    tweets = state.get("tweets")
+
+    if isinstance(tweets, list):
+        return tweets
 
     x_data = state.get(
         "x_data",
         {}
     )
 
-    tweets = x_data.get(
-        "tweets",
-        []
+    if isinstance(x_data, dict):
+
+        tweets = x_data.get(
+            "tweets",
+            []
+        )
+
+        if isinstance(tweets, list):
+            return tweets
+
+    return []
+
+
+def clean_text(text: str) -> str:
+
+    text = re.sub(
+        r"https?://\S+",
+        " ",
+        text
     )
 
-    tweets_status = x_data.get(
-        "tweets_status",
-        "unknown"
+    text = re.sub(
+        r"www\.\S+",
+        " ",
+        text
     )
 
-    if not tweets:
+    text = re.sub(
+        r"@\w+",
+        " ",
+        text
+    )
 
-        if tweets_status == "rate_limited":
+    text = re.sub(
+        r"#(\w+)",
+        r" \1 ",
+        text
+    )
 
-            return {
-                "topic_analysis": {
-                    "status": "rate_limited",
+    return text
 
-                    "summary": (
-                        "Topic analysis could not be performed "
-                        "because tweet collection was temporarily "
-                        "unavailable."
-                    ),
 
-                    "hashtags": [],
-                    "keywords": [],
-                    "languages": {}
-                }
-            }
+def topic_agent(state):
 
-        return {
-            "topic_analysis": {
-                "status": "not_analyzed",
+    tweets = get_tweets(state)
 
-                "summary": (
-                    "Topic analysis was not performed because "
-                    "no tweet content was collected."
-                ),
+    print(
+        f"      Topic analysis received "
+        f"{len(tweets)} tweets."
+    )
 
-                "hashtags": [],
-                "keywords": [],
-                "languages": {}
-            }
-        }
+    keyword_counter = Counter()
+    hashtag_counter = Counter()
 
-    hashtags = []
-
-    words = []
-
-    languages = []
-
-    stop_words = {
-        "this",
-        "that",
-        "with",
-        "from",
-        "have",
-        "will",
-        "your",
-        "about",
-        "what",
-        "when",
-        "where",
-        "which",
-        "their",
-        "there",
-        "they",
-        "been",
-        "were",
-        "would",
-        "could",
-        "should",
-        "into",
-        "than",
-        "then",
-        "also",
-        "just",
-        "more",
-        "very",
-        "some"
-    }
+    target = (
+        state.get(
+            "person_name",
+            ""
+        )
+        .lower()
+        .replace(
+            " ",
+            ""
+        )
+    )
 
     for tweet in tweets:
 
-        tweet_hashtags = tweet.get(
+        if not isinstance(tweet, dict):
+            continue
+
+        text = clean_text(
+            tweet.get(
+                "text",
+                ""
+            )
+        )
+
+        words = re.findall(
+            r"\b[a-zA-Z][a-zA-Z'-]{2,}\b",
+            text.lower()
+        )
+
+        for word in words:
+
+            normalized = (
+                word
+                .strip("-'")
+                .lower()
+            )
+
+            if (
+                normalized in STOPWORDS
+                or normalized == target
+                or len(normalized) < 3
+            ):
+                continue
+
+            keyword_counter[
+                normalized
+            ] += 1
+
+        hashtags = tweet.get(
             "hashtags",
             []
         )
 
-        hashtags.extend(
-            tweet_hashtags
-        )
+        for hashtag in hashtags:
 
-        language = tweet.get(
-            "lang"
-        )
+            hashtag = str(
+                hashtag
+            ).strip().lstrip("#").lower()
 
-        if language:
+            if hashtag:
+                hashtag_counter[
+                    f"#{hashtag}"
+                ] += 1
 
-            languages.append(
-                language
-            )
+    analysis = {
+        "tweets_analyzed":
+            len(tweets),
 
-        text = tweet.get(
-            "text",
-            ""
-        ).lower()
+        "top_keywords":
+            [
+                {
+                    "keyword": word,
+                    "count": count
+                }
+                for word, count
+                in keyword_counter.most_common(20)
+            ],
 
-        text = re.sub(
-            r"https?://\S+",
-            "",
-            text
-        )
+        "hashtags":
+            [
+                {
+                    "hashtag": tag,
+                    "count": count
+                }
+                for tag, count
+                in hashtag_counter.most_common(20)
+            ],
+    }
 
-        found_words = re.findall(
-            r"\b[a-zA-Z]{4,}\b",
-            text
-        )
-
-        words.extend(
-            word
-            for word in found_words
-            if word not in stop_words
-        )
-
-    hashtag_counts = Counter(
-        hashtags
+    print(
+        "      Topic analysis completed."
     )
-
-    word_counts = Counter(
-        words
-    )
-
-    language_counts = Counter(
-        languages
-    )
-
-    common_hashtags = [
-        {
-            "hashtag": tag,
-            "count": count
-        }
-
-        for tag, count
-        in hashtag_counts.most_common(10)
-    ]
-
-    common_keywords = [
-        {
-            "keyword": word,
-            "count": count
-        }
-
-        for word, count
-        in word_counts.most_common(20)
-    ]
 
     return {
-        "topic_analysis": {
-
-            "status": "success",
-
-            "hashtags": common_hashtags,
-
-            "keywords": common_keywords,
-
-            "languages": dict(
-                language_counts
-            ),
-
-            "summary": (
-                f"{len(tweets)} tweets were analyzed "
-                "for hashtags, keywords and languages."
-            )
-        }
+        "topic_analysis":
+            analysis
     }
